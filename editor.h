@@ -8,8 +8,6 @@
 
 /*** defines ***/
 #define KUT_VERSION "0.0.1"
-#define KUT_TAB_STOP 8
-#define KUT_QUIT_TIMES 3
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 /*** enums ***/
@@ -75,6 +73,10 @@ public:
   char statusmsg[80];
   time_t statusmsg_time;
   struct editorSyntax *syntax;
+
+  int tab_stop;
+  int quit_times;
+  int quit_times_cfg;
 
   CommandStack undoStack;
   CommandStack redoStack;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "buffermanager.h"
 #include "editor.h"
 #include <termios.h>
@@ -9,6 +10,7 @@ public:
   BufferManager &buffers;  // reference to the buffer manager, not a copy cause it can not be NULL
   struct termios orig_termios;
   int screenrows, screencols;
+  Config config;
 
   Terminal(BufferManager &bm);
   ~Terminal();

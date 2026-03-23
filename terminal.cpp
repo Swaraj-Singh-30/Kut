@@ -457,7 +457,6 @@ void Terminal::moveCursor(int key) {
 
 void Terminal::processKeypress() {
   Editor &editor = buffers.current();
-  static int quit_times = KUT_QUIT_TIMES;
   int c = readKey();
   switch (c) {
     case '\r':
@@ -466,27 +465,37 @@ void Terminal::processKeypress() {
       break;
 
     case CTRL_KEY('q'):
-      if (editor.dirty && quit_times > 0) {
+      if (editor.dirty && editor.quit_times > 0) {
         editor.setStatusMessage("WARNING!!! Unsaved changes. "
-          "Press Ctrl-Q %d more times to quit.", quit_times);
-        quit_times--;
+          "Press Ctrl-Q %d more times to quit.", editor.quit_times);
+        editor.quit_times--;
         return;
       }
       write(STDOUT_FILENO, "\x1b[2J", 4);
       write(STDOUT_FILENO, "\x1b[H", 3);
       exit(0);
-    case CTRL_KEY('s'): save(); break;
-    case HOME_KEY: editor.cx = 0; break;
+
+    case CTRL_KEY('s'):
+      save();
+      break;
+
+    case HOME_KEY:
+      editor.cx = 0;
+      break;
+
     case END_KEY:
       if (editor.cy < editor.numrows)
         editor.cx = editor.row[editor.cy].size;
       break;
-    case CTRL_KEY('f'): find(); break;
+
+    case CTRL_KEY('f'):
+      find();
+      break;
+
     case BACKSPACE:
     case CTRL_KEY('h'):
     case DEL_KEY: {
       if (c == DEL_KEY) moveCursor(ARROW_RIGHT);
-      // capture what's about to be deleted before deleting it
       bool wasNewline = (editor.cx == 0 && editor.cy > 0);
       char deleted = '\0';
       if (!wasNewline && editor.cx > 0)
@@ -495,6 +504,23 @@ void Terminal::processKeypress() {
         std::make_unique<DeleteCharCommand>(editor.cx, editor.cy, deleted, wasNewline));
       break;
     }
+
+    case CTRL_KEY('z'):
+      editor.undo();
+      break;
+
+    case CTRL_KEY('y'):
+      editor.redo();
+      break;
+
+    case CTRL_KEY('n'):
+      buffers.next();
+      break;
+
+    case CTRL_KEY('p'):
+      buffers.prev();
+      break;
+
     case PAGE_UP:
     case PAGE_DOWN: {
       if (c == PAGE_UP) editor.cy = editor.rowoff;
@@ -506,22 +532,21 @@ void Terminal::processKeypress() {
       while (times--) moveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
       break;
     }
-    case CTRL_KEY('z'): editor.undo(); break;
-    case CTRL_KEY('y'): editor.redo(); break;
-    case ARROW_UP: case ARROW_DOWN:
-    case ARROW_LEFT: case ARROW_RIGHT:
-      moveCursor(c); break;
+
+    case ARROW_UP:
+    case ARROW_DOWN:
+    case ARROW_LEFT:
+    case ARROW_RIGHT:
+      moveCursor(c);
+      break;
+
     case CTRL_KEY('l'):
-    case '\x1b': break;
-    case CTRL_KEY('n'):          // Ctrl-N = next buffer
-      buffers.next();
-    break;
-    case CTRL_KEY('p'):          // Ctrl-P = prev buffer  
-      buffers.prev();
-    break;
+    case '\x1b':
+      break;
+
     default:
-    editor.applyCommand(
-      std::make_unique<InsertCharCommand>(editor.cx, editor.cy, c));
-    break;
+      editor.applyCommand(
+        std::make_unique<InsertCharCommand>(editor.cx, editor.cy, c));
+      break;
   }
 }

@@ -45,7 +45,10 @@ Editor::Editor() {
   filename = NULL;
   statusmsg[0] = '\0';
   statusmsg_time = 0;
-  syntax = NULL;
+  syntax = NULL; 
+  tab_stop = 4;        
+  quit_times = 3;     
+  quit_times_cfg = 3; 
 }
 
 Editor::~Editor() {
@@ -199,7 +202,7 @@ int Editor::rowCxToRx(erow *row, int cx) {
   int rx = 0;
   for (int j = 0; j < cx; j++) {
     if (row->chars[j] == '\t')
-      rx += (KUT_TAB_STOP - 1) - (rx % KUT_TAB_STOP);
+      rx += (tab_stop - 1) - (rx % tab_stop);
     rx++;
   }
   return rx;
@@ -210,7 +213,7 @@ int Editor::rowRxToCx(erow *row, int rx) {
   int cx;
   for (cx = 0; cx < row->size; cx++) {
     if (row->chars[cx] == '\t')
-      cur_rx += (KUT_TAB_STOP - 1) - (cur_rx % KUT_TAB_STOP);
+      cur_rx += (tab_stop - 1) - (cur_rx % tab_stop);
     cur_rx++;
     if (cur_rx > rx) return cx;
   }
@@ -222,12 +225,12 @@ void Editor::updateRow(erow *row) {
   for (int j = 0; j < row->size; j++)
     if (row->chars[j] == '\t') tabs++;
   free(row->render);
-  row->render = (char *)malloc(row->size + tabs * (KUT_TAB_STOP - 1) + 1);
+  row->render = (char *)malloc(row->size + tabs * (tab_stop - 1) + 1);
   int idx = 0;
   for (int j = 0; j < row->size; j++) {
     if (row->chars[j] == '\t') {
       row->render[idx++] = ' ';
-      while (idx % KUT_TAB_STOP != 0) row->render[idx++] = ' ';
+      while (idx % tab_stop != 0) row->render[idx++] = ' ';
     } else {
       row->render[idx++] = row->chars[j];
     }

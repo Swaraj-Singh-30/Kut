@@ -10,6 +10,7 @@ add_executable(kut
     terminal.cpp
     command.cpp
     buffermanager.cpp   
+    config.cpp
 )
 
 if(UNIX AND NOT APPLE)
