@@ -1,0 +1,23 @@
+# Build output
+build/
+
+# Compiled binary if built in root
+kut
+
+# Editor temp files
+*.swp
+*.swo
+*~
+```
+
+So your repo should look like:
+```
+Kut/
+├── .gitignore
+├── CMakeLists.txt
+├── README.md
+├── editor.cpp
+├── editor.h
+├── main.cpp
+├── terminal.cpp
+└── terminal.h
