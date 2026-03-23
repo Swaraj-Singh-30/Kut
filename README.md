@@ -43,7 +43,7 @@ The codebase is split into two clear layers:
 This separation means a GUI renderer can be added later without touching the editor core.
 
 ## Roadmap
-- [ ] Undo/redo
+- [x] Undo/redo
 - [ ] Multiple buffers
 - [ ] Config file (`~/.kutrc`)
 - [ ] GUI mode via Dear ImGui

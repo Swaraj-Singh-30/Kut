@@ -1,9 +1,10 @@
 #include "editor.h"
 #include "terminal.h"
+#include "buffermanager.h"
 
 int main(int argc, char *argv[]) {
-  Editor editor;
-  Terminal terminal(editor);
+  BufferManager buffers;
+  Terminal terminal(buffers);
 
   terminal.enableRawMode();
 
@@ -11,16 +12,16 @@ int main(int argc, char *argv[]) {
   if (terminal.getWindowSize(&rows, &cols) == -1) {
     perror("getWindowSize"); return 1;
   }
-
-  terminal.screenrows = rows - 2;
+  terminal.screenrows = rows - 3;
   terminal.screencols = cols;
-  editor.init(); 
 
-  if (argc >= 2) editor.openFile(argv[1]);
+  // open all files passed as arguments
+  for (int i = 1; i < argc; i++)
+    buffers.openFile(argv[i]);
 
-  editor.setStatusMessage(
-  "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find | Ctrl-Z = undo | Ctrl-Y = redo");
-  
+  buffers.current().setStatusMessage(
+    "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find | Ctrl-Z = undo | Ctrl-Y = redo | Ctrl-Tab = next buffer");
+
   while (1) {
     terminal.refreshScreen();
     terminal.processKeypress();

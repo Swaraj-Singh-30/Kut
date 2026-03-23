@@ -28,7 +28,7 @@ static void abAppend(struct abuf *ab, const char *s, int len) {
 static void abFree(struct abuf *ab) { free(ab->b); }
 
 /*** lifecycle ***/
-Terminal::Terminal(Editor &e) : editor(e), screenrows(0), screencols(0) {}
+Terminal::Terminal(BufferManager &bm) : buffers(bm), screenrows(0), screencols(0) {}
 
 Terminal::~Terminal() {
   disableRawMode();
@@ -128,6 +128,7 @@ int Terminal::readKey() {
 char *Terminal::prompt(const char *promptStr,
                        void (*callback)(Editor &, char *, int)) {
   size_t bufsize = 128;
+  Editor &editor = buffers.current();
   char *buf = (char *)malloc(bufsize);
   size_t buflen = 0;
   buf[0] = '\0';
@@ -162,6 +163,7 @@ char *Terminal::prompt(const char *promptStr,
 
 /*** output ***/
 void Terminal::scroll() {
+  Editor &editor = buffers.current();
   editor.rx = 0;
   if (editor.cy < editor.numrows)
     editor.rx = editor.rowCxToRx(&editor.row[editor.cy], editor.cx);
@@ -174,7 +176,57 @@ void Terminal::scroll() {
     editor.coloff = editor.rx - screencols + 1;
 }
 
+void Terminal::drawTabBar(struct abuf *ab) {
+  abAppend(ab, "\x1b[0;44m", 7);  // blue background
+
+  int len = 0;
+  const auto &bufs = buffers.getBuffers();
+
+  for (int i = 0; i < (int)bufs.size(); i++) {
+    const char *name = bufs[i]->filename
+      ? strrchr(bufs[i]->filename, '/')  // get just the filename, not full path
+      : NULL;
+    name = (name && *(name + 1)) ? name + 1 : (bufs[i]->filename ? bufs[i]->filename : "[No Name]");
+
+    // build the tab label
+    char tab[64];
+    int tablen = snprintf(tab, sizeof(tab), " %s%s ",
+      name,
+      bufs[i]->dirty ? " *" : "");
+
+    if (len + tablen > screencols) break;  // don't overflow the line
+
+    if (i == buffers.activeIndex()) {
+      // active tab — white background, dark text
+      abAppend(ab, "\x1b[0;47;30m", 10);
+    } else {
+      // inactive tab — blue background, white text
+      abAppend(ab, "\x1b[0;44;37m", 10);
+    }
+
+    abAppend(ab, tab, tablen);
+    len += tablen;
+
+    // separator between tabs
+    if (i < (int)bufs.size() - 1) {
+      abAppend(ab, "\x1b[0;44m|", 8);
+      len++;
+    }
+  }
+
+  // fill the rest of the line with blue background
+  abAppend(ab, "\x1b[0;44m", 7);
+  while (len < screencols) {
+    abAppend(ab, " ", 1);
+    len++;
+  }
+
+  abAppend(ab, "\x1b[m", 3);
+  abAppend(ab, "\r\n", 2);
+}
+
 void Terminal::drawRows(struct abuf *ab) {
+  Editor &editor = buffers.current();
   for (int y = 0; y < screenrows; y++) {
     int filerow = y + editor.rowoff;
     if (filerow >= editor.numrows) {
@@ -233,11 +285,18 @@ void Terminal::drawRows(struct abuf *ab) {
 }
 
 void Terminal::drawStatusBar(struct abuf *ab) {
+  Editor &editor = buffers.current();
   abAppend(ab, "\x1b[7m", 4);
   char status[80], rstatus[80];
+
+  // strip directory path, show just the filename
+  const char *displayname = editor.filename ? strrchr(editor.filename, '/') : NULL;
+  displayname = (displayname && *(displayname + 1))
+    ? displayname + 1
+    : (editor.filename ? editor.filename : "[No Name]");
+
   int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
-    editor.filename ? editor.filename : "[No Name]", editor.numrows,
-    editor.dirty ? "(modified)" : "");
+    displayname, editor.numrows, editor.dirty ? "(modified)" : "");
   int rlen = snprintf(rstatus, sizeof(rstatus), "%s | %d/%d",
     editor.syntax ? editor.syntax->filetype : "no ft",
     editor.cy + 1, editor.numrows);
@@ -255,7 +314,9 @@ void Terminal::drawStatusBar(struct abuf *ab) {
   abAppend(ab, "\r\n", 2);
 }
 
+
 void Terminal::drawMessageBar(struct abuf *ab) {
+  Editor &editor = buffers.current();
   abAppend(ab, "\x1b[K", 3);
   int msglen = strlen(editor.statusmsg);
   if (msglen > screencols) msglen = screencols;
@@ -264,11 +325,13 @@ void Terminal::drawMessageBar(struct abuf *ab) {
 }
 
 void Terminal::refreshScreen() {
+  Editor &editor = buffers.current();
   scroll();
   struct abuf ab = ABUF_INIT;
   abAppend(&ab, "\x1b[?25l", 6);
   abAppend(&ab, "\x1b[H", 3);
   drawRows(&ab);
+  drawTabBar(&ab);       
   drawStatusBar(&ab);
   drawMessageBar(&ab);
   char buf[32];
@@ -322,6 +385,7 @@ void Terminal::findCallback(Editor &e, char *query, int key) {
 }
 
 void Terminal::find() {
+  Editor &editor = buffers.current();
   int saved_cx = editor.cx, saved_cy = editor.cy;
   int saved_coloff = editor.coloff, saved_rowoff = editor.rowoff;
   char *query = prompt("Search: %s (ESC/Arrows/Enter)", findCallback);
@@ -334,6 +398,7 @@ void Terminal::find() {
 
 /*** save ***/
 void Terminal::save() {
+  Editor &editor = buffers.current();
   if (editor.filename == NULL) {
     editor.filename = prompt("Save as: %s (ESC to cancel)", NULL);
     if (editor.filename == NULL) {
@@ -362,6 +427,7 @@ void Terminal::save() {
 
 /*** input ***/
 void Terminal::moveCursor(int key) {
+  Editor &editor = buffers.current();
   erow *row = (editor.cy >= editor.numrows) ? NULL : &editor.row[editor.cy];
   switch (key) {
     case ARROW_LEFT:
@@ -390,6 +456,7 @@ void Terminal::moveCursor(int key) {
 }
 
 void Terminal::processKeypress() {
+  Editor &editor = buffers.current();
   static int quit_times = KUT_QUIT_TIMES;
   int c = readKey();
   switch (c) {
@@ -446,6 +513,12 @@ void Terminal::processKeypress() {
       moveCursor(c); break;
     case CTRL_KEY('l'):
     case '\x1b': break;
+    case CTRL_KEY('n'):          // Ctrl-N = next buffer
+      buffers.next();
+    break;
+    case CTRL_KEY('p'):          // Ctrl-P = prev buffer  
+      buffers.prev();
+    break;
     default:
     editor.applyCommand(
       std::make_unique<InsertCharCommand>(editor.cx, editor.cy, c));

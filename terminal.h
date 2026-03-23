@@ -1,21 +1,23 @@
 #pragma once
 
+#include "buffermanager.h"
 #include "editor.h"
 #include <termios.h>
 
 class Terminal {
 public:
-  Editor &editor;  // reference to the editor, not a copy cause it can not be NULL
+  BufferManager &buffers;  // reference to the buffer manager, not a copy cause it can not be NULL
   struct termios orig_termios;
   int screenrows, screencols;
 
-  Terminal(Editor &e);
+  Terminal(BufferManager &bm);
   ~Terminal();
 
   // setup
   void enableRawMode();
   void disableRawMode();
   int  getWindowSize(int *rows, int *cols);
+  void drawTabBar(struct abuf *ab);
 
   // input
   int   readKey();
