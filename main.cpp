@@ -15,8 +15,9 @@ int main(int argc, char *argv[]) {
 
   if (argc >= 2) editor.openFile(argv[1]);
 
-  editor.setStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
-
+  editor.setStatusMessage(
+  "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find | Ctrl-Z = undo | Ctrl-Y = redo");
+  
   while (1) {
     terminal.refreshScreen();
     terminal.processKeypress();

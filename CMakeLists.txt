@@ -8,6 +8,7 @@ add_executable(kut
     main.cpp
     editor.cpp
     terminal.cpp
+    command.cpp   
 )
 
 if(UNIX AND NOT APPLE)

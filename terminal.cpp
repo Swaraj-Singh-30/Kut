@@ -393,7 +393,11 @@ void Terminal::processKeypress() {
   static int quit_times = KUT_QUIT_TIMES;
   int c = readKey();
   switch (c) {
-    case '\r': editor.insertNewline(); break;
+    case '\r':
+      editor.applyCommand(
+        std::make_unique<InsertNewlineCommand>(editor.cx, editor.cy));
+      break;
+
     case CTRL_KEY('q'):
       if (editor.dirty && quit_times > 0) {
         editor.setStatusMessage("WARNING!!! Unsaved changes. "
@@ -413,10 +417,17 @@ void Terminal::processKeypress() {
     case CTRL_KEY('f'): find(); break;
     case BACKSPACE:
     case CTRL_KEY('h'):
-    case DEL_KEY:
+    case DEL_KEY: {
       if (c == DEL_KEY) moveCursor(ARROW_RIGHT);
-      editor.delChar();
+      // capture what's about to be deleted before deleting it
+      bool wasNewline = (editor.cx == 0 && editor.cy > 0);
+      char deleted = '\0';
+      if (!wasNewline && editor.cx > 0)
+        deleted = editor.row[editor.cy].chars[editor.cx - 1];
+      editor.applyCommand(
+        std::make_unique<DeleteCharCommand>(editor.cx, editor.cy, deleted, wasNewline));
       break;
+    }
     case PAGE_UP:
     case PAGE_DOWN: {
       if (c == PAGE_UP) editor.cy = editor.rowoff;
@@ -428,11 +439,16 @@ void Terminal::processKeypress() {
       while (times--) moveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
       break;
     }
+    case CTRL_KEY('z'): editor.undo(); break;
+    case CTRL_KEY('y'): editor.redo(); break;
     case ARROW_UP: case ARROW_DOWN:
     case ARROW_LEFT: case ARROW_RIGHT:
       moveCursor(c); break;
     case CTRL_KEY('l'):
     case '\x1b': break;
-    default: editor.insertChar(c); break;
+    default:
+    editor.applyCommand(
+      std::make_unique<InsertCharCommand>(editor.cx, editor.cy, c));
+    break;
   }
 }

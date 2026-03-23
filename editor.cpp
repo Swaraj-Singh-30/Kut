@@ -4,6 +4,7 @@
 
 #include "editor.h"
 
+#include "command.h"
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -335,6 +336,33 @@ void Editor::delChar() {
     cy--;
   }
 }
+
+void Editor::applyCommand(std::unique_ptr<Command> cmd) {
+  cmd->execute(*this);
+  undoStack.push_back(std::move(cmd));
+
+  // drop oldest if over limit
+  if (undoStack.size() > KUT_MAX_UNDO)
+    undoStack.pop_front();
+
+  // clear redo
+  redoStack.clear();
+}
+
+void Editor::undo() {
+  if (undoStack.empty()) return;
+  undoStack.back()->undo(*this);
+  redoStack.push_back(std::move(undoStack.back()));
+  undoStack.pop_back();
+}
+
+void Editor::redo() {
+  if (redoStack.empty()) return;
+  redoStack.back()->execute(*this);
+  undoStack.push_back(std::move(redoStack.back()));
+  redoStack.pop_back();
+}
+
 
 /*** file i/o ***/
 char *Editor::rowsToString(int *buflen) {

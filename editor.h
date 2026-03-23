@@ -1,5 +1,6 @@
 #pragma once
 
+#include "command.h"
 #include <string>
 #include <vector>
 #include <termios.h>
@@ -76,6 +77,9 @@ public:
   time_t statusmsg_time;
   struct editorSyntax *syntax;
 
+  CommandStack undoStack;
+  CommandStack redoStack;
+
   // lifecycle
   Editor();
   ~Editor();
@@ -96,6 +100,10 @@ public:
   void insertChar(int c);
   void insertNewline();
   void delChar();
+
+  void applyCommand(std::unique_ptr<Command> cmd);
+  void undo();
+  void redo();
 
   // file i/o
   char *rowsToString(int *buflen);
