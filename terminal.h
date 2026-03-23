@@ -7,6 +7,7 @@ class Terminal {
 public:
   Editor &editor;  // reference to the editor, not a copy cause it can not be NULL
   struct termios orig_termios;
+  int screenrows, screencols;
 
   Terminal(Editor &e);
   ~Terminal();

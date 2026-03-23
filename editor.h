@@ -68,7 +68,6 @@ public:
   int cx, cy;
   int rx;
   int rowoff, coloff;
-  int screenrows, screencols;
   int numrows;
   erow *row;
   int dirty;
@@ -83,7 +82,7 @@ public:
   // lifecycle
   Editor();
   ~Editor();
-  void init(int rows, int cols);
+  void init();
 
   // row operations
   int  rowCxToRx(erow *row, int cx);

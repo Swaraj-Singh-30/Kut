@@ -11,7 +11,10 @@ int main(int argc, char *argv[]) {
   if (terminal.getWindowSize(&rows, &cols) == -1) {
     perror("getWindowSize"); return 1;
   }
-  editor.init(rows, cols);
+
+  terminal.screenrows = rows - 2;
+  terminal.screencols = cols;
+  editor.init(); 
 
   if (argc >= 2) editor.openFile(argv[1]);
 

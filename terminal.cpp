@@ -28,7 +28,7 @@ static void abAppend(struct abuf *ab, const char *s, int len) {
 static void abFree(struct abuf *ab) { free(ab->b); }
 
 /*** lifecycle ***/
-Terminal::Terminal(Editor &e) : editor(e) {}
+Terminal::Terminal(Editor &e) : editor(e), screenrows(0), screencols(0) {}
 
 Terminal::~Terminal() {
   disableRawMode();
@@ -167,23 +167,23 @@ void Terminal::scroll() {
     editor.rx = editor.rowCxToRx(&editor.row[editor.cy], editor.cx);
 
   if (editor.cy < editor.rowoff) editor.rowoff = editor.cy;
-  if (editor.cy >= editor.rowoff + editor.screenrows)
-    editor.rowoff = editor.cy - editor.screenrows + 1;
+  if (editor.cy >= editor.rowoff + screenrows)
+    editor.rowoff = editor.cy - screenrows + 1;
   if (editor.rx < editor.coloff) editor.coloff = editor.rx;
-  if (editor.rx >= editor.coloff + editor.screencols)
-    editor.coloff = editor.rx - editor.screencols + 1;
+  if (editor.rx >= editor.coloff + screencols)
+    editor.coloff = editor.rx - screencols + 1;
 }
 
 void Terminal::drawRows(struct abuf *ab) {
-  for (int y = 0; y < editor.screenrows; y++) {
+  for (int y = 0; y < screenrows; y++) {
     int filerow = y + editor.rowoff;
     if (filerow >= editor.numrows) {
-      if (editor.numrows == 0 && y == editor.screenrows / 3) {
+      if (editor.numrows == 0 && y == screenrows / 3) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome),
           "Kut editor -- version %s", KUT_VERSION);
-        if (welcomelen > editor.screencols) welcomelen = editor.screencols;
-        int padding = (editor.screencols - welcomelen) / 2;
+        if (welcomelen > screencols) welcomelen = screencols;
+        int padding = (screencols - welcomelen) / 2;
         if (padding) { abAppend(ab, "~", 1); padding--; }
         while (padding--) abAppend(ab, " ", 1);
         abAppend(ab, welcome, welcomelen);
@@ -193,7 +193,7 @@ void Terminal::drawRows(struct abuf *ab) {
     } else {
       int len = editor.row[filerow].rsize - editor.coloff;
       if (len < 0) len = 0;
-      if (len > editor.screencols) len = editor.screencols;
+      if (len > screencols) len = screencols;
       char *c = &editor.row[filerow].render[editor.coloff];
       unsigned char *hl = &editor.row[filerow].hl[editor.coloff];
       int current_color = -1;
@@ -241,10 +241,10 @@ void Terminal::drawStatusBar(struct abuf *ab) {
   int rlen = snprintf(rstatus, sizeof(rstatus), "%s | %d/%d",
     editor.syntax ? editor.syntax->filetype : "no ft",
     editor.cy + 1, editor.numrows);
-  if (len > editor.screencols) len = editor.screencols;
+  if (len > screencols) len = screencols;
   abAppend(ab, status, len);
-  while (len < editor.screencols) {
-    if (editor.screencols - len == rlen) {
+  while (len < screencols) {
+    if (screencols - len == rlen) {
       abAppend(ab, rstatus, rlen);
       break;
     }
@@ -258,7 +258,7 @@ void Terminal::drawStatusBar(struct abuf *ab) {
 void Terminal::drawMessageBar(struct abuf *ab) {
   abAppend(ab, "\x1b[K", 3);
   int msglen = strlen(editor.statusmsg);
-  if (msglen > editor.screencols) msglen = editor.screencols;
+  if (msglen > screencols) msglen = screencols;
   if (msglen && time(NULL) - editor.statusmsg_time < 5)
     abAppend(ab, editor.statusmsg, msglen);
 }
@@ -432,10 +432,10 @@ void Terminal::processKeypress() {
     case PAGE_DOWN: {
       if (c == PAGE_UP) editor.cy = editor.rowoff;
       else {
-        editor.cy = editor.rowoff + editor.screenrows - 1;
+        editor.cy = editor.rowoff + screenrows - 1;
         if (editor.cy > editor.numrows) editor.cy = editor.numrows;
       }
-      int times = editor.screenrows;
+      int times = screenrows;
       while (times--) moveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
       break;
     }

@@ -39,7 +39,6 @@ struct editorSyntax HLDB[] = {
 Editor::Editor() {
   cx = cy = rx = 0;
   rowoff = coloff = 0;
-  screenrows = screencols = 0;
   numrows = 0;
   row = NULL;
   dirty = 0;
@@ -57,9 +56,8 @@ Editor::~Editor() {
   free(filename);
 }
 
-void Editor::init(int rows, int cols) {
-  screenrows = rows - 2; // reserve 2 lines for status bar + message bar
-  screencols = cols;
+void Editor::init() {
+  // nothing here yet, but will keep it for future use
 }
 
 /*** syntax highlighting ***/
