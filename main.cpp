@@ -12,6 +12,7 @@ int main(int argc, char *argv[]) {
   Terminal terminal(buffers);
 
   terminal.enableRawMode();
+  terminal.enableMouse();
 
   int rows, cols;
   if (terminal.getWindowSize(&rows, &cols) == -1) {

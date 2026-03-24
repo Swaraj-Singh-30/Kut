@@ -25,6 +25,11 @@ public:
   // expose buffers for tab bar rendering
   const std::vector<std::unique_ptr<Editor>> &getBuffers() const;
 
+  void setActive(int index) {
+  if (index >= 0 && index < (int)buffers.size())
+    active = index;
+  }
+
 private:
   std::vector<std::unique_ptr<Editor>> buffers;
   int active;

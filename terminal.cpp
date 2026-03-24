@@ -28,9 +28,10 @@ static void abAppend(struct abuf *ab, const char *s, int len) {
 static void abFree(struct abuf *ab) { free(ab->b); }
 
 /*** lifecycle ***/
-Terminal::Terminal(BufferManager &bm) : buffers(bm), screenrows(0), screencols(0) {}
+Terminal::Terminal(BufferManager &bm) : buffers(bm), screenrows(0), screencols(0), mouseScrolled(false) {}
 
 Terminal::~Terminal() {
+  disableMouse();
   disableRawMode();
 }
 
@@ -88,10 +89,37 @@ int Terminal::readKey() {
     if (nread == -1 && errno != EAGAIN) { perror("read"); exit(1); }
   }
   if (c == '\x1b') {
-    char seq[3];
+    char seq[8];
     if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
     if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+
     if (seq[0] == '[') {
+      // check for SGR mouse sequence: \x1b[
+      if (seq[1] == '<') {
+        char buf[32];
+        int i = 0;
+        while (i < (int)sizeof(buf) - 1) {
+          char ch;
+          if (read(STDIN_FILENO, &ch, 1) != 1) break;
+          buf[i++] = ch;
+          if (ch == 'M' || ch == 'm') break;
+        }
+        buf[i] = '\0';
+        int button, col, row;
+        char final;
+        if (sscanf(buf, "%d;%d;%d%c", &button, &col, &row, &final) == 4
+            && final == 'M') {
+          lastEvent.type         = InputEvent::MOUSE;
+          lastEvent.mouse.button = button;
+          lastEvent.mouse.col    = col;
+          lastEvent.mouse.row    = row;
+          if (button == 64 || button == 65)
+            return MOUSE_SCROLL;
+          return MOUSE_PRESS;
+        }
+        return '\x1b';
+      }
+
       if (seq[1] >= '0' && seq[1] <= '9') {
         if (read(STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
         if (seq[2] == '~') {
@@ -123,6 +151,14 @@ int Terminal::readKey() {
     return '\x1b';
   }
   return c;
+}
+
+InputEvent Terminal::readInput() {
+  lastEvent.type = InputEvent::KEY;
+  lastEvent.key  = readKey();
+  if (lastEvent.type == InputEvent::MOUSE)
+    return lastEvent;
+  return lastEvent;
 }
 
 char *Terminal::prompt(const char *promptStr,
@@ -197,10 +233,10 @@ void Terminal::drawTabBar(struct abuf *ab) {
     if (len + tablen > screencols) break;  // don't overflow the line
 
     if (i == buffers.activeIndex()) {
-      // active tab — white background, dark text
+      // active tab, white background, dark text
       abAppend(ab, "\x1b[0;47;30m", 10);
     } else {
-      // inactive tab — blue background, white text
+      // inactive tab, blue background, white text
       abAppend(ab, "\x1b[0;44;37m", 10);
     }
 
@@ -326,20 +362,32 @@ void Terminal::drawMessageBar(struct abuf *ab) {
 
 void Terminal::refreshScreen() {
   Editor &editor = buffers.current();
-  scroll();
+
+  if (!mouseScrolled)
+    scroll();
+  mouseScrolled = false;
+
   struct abuf ab = ABUF_INIT;
   abAppend(&ab, "\x1b[?25l", 6);
   abAppend(&ab, "\x1b[H", 3);
   drawRows(&ab);
-  drawTabBar(&ab);       
+  drawTabBar(&ab);
   drawStatusBar(&ab);
   drawMessageBar(&ab);
-  char buf[32];
-  snprintf(buf, sizeof(buf), "\x1b[%d;%dH",
-    (editor.cy - editor.rowoff) + 1,
-    (editor.rx - editor.coloff) + 1);
-  abAppend(&ab, buf, strlen(buf));
-  abAppend(&ab, "\x1b[?25h", 6);
+
+  // only show cursor if it's within the visible viewport
+  bool cursorVisible = (editor.cy >= editor.rowoff && 
+                        editor.cy < editor.rowoff + screenrows);
+  if (cursorVisible) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH",
+      (editor.cy - editor.rowoff) + 1,
+      (editor.rx - editor.coloff) + 1);
+    abAppend(&ab, buf, strlen(buf));
+    abAppend(&ab, "\x1b[?25h", 6); // show cursor
+  }
+  // if cursor not visible, leave it hidden (\x1b[?25l already sent above)
+
   write(STDOUT_FILENO, ab.b, ab.len);
   abFree(&ab);
 }
@@ -455,9 +503,104 @@ void Terminal::moveCursor(int key) {
   if (editor.cx > rowlen) editor.cx = rowlen;
 }
 
+void Terminal::enableMouse() {
+  // SGR extended mouse mode, handles terminals wider than 223 cols
+  write(STDOUT_FILENO, "\x1b[?1000h", 8); // enable mouse clicks
+  write(STDOUT_FILENO, "\x1b[?1006h", 8); // enable SGR extended mode
+}
+
+void Terminal::disableMouse() {
+  write(STDOUT_FILENO, "\x1b[?1006l", 8);
+  write(STDOUT_FILENO, "\x1b[?1000l", 8);
+}
+
+
+void Terminal::handleMouse(const MouseEvent &mouse) {
+  Editor &editor = buffers.current();
+  // editor.setStatusMessage("mouse: btn=%d col=%d row=%d", 
+  //   mouse.button, mouse.col, mouse.row);
+  // tab bar is row 1, status bar is screenrows+2, message is screenrows+3
+  int tabBarRow   = screenrows + 1;  // tab bar is BELOW text area
+  int textAreaTop = 1;               // text starts at row 1
+  int textAreaBot = screenrows;      // text ends at screenrows
+
+if (mouse.button == 64) {
+  int delta = 3;
+  if (editor.rowoff - delta < 0) delta = editor.rowoff;
+  editor.rowoff -= delta;
+  editor.cy -= delta;
+  if (editor.cy < 0) editor.cy = 0;
+  mouseScrolled = true;
+  return;
+}
+if (mouse.button == 65) {
+  int maxRowoff = editor.numrows - screenrows;
+  if (maxRowoff < 0) maxRowoff = 0;
+  int delta = 3;
+  if (editor.rowoff + delta > maxRowoff) delta = maxRowoff - editor.rowoff;
+  editor.rowoff += delta;
+  editor.cy += delta;
+  if (editor.cy >= editor.numrows) editor.cy = editor.numrows - 1;
+  mouseScrolled = true;
+  return;
+}
+  if (mouse.button == 0) { // left click
+    if (mouse.row == tabBarRow) {
+      // click on tab bar, figure out which tab was clicked
+      handleTabClick(mouse.col);
+      return;
+    }
+
+    if (mouse.row >= textAreaTop && mouse.row <= textAreaBot) {
+      // click in text area, move cursor
+      int filerow = (mouse.row - textAreaTop) + editor.rowoff;
+      int filecol = (mouse.col - 1) + editor.coloff;
+
+      // clamp to valid range
+      if (filerow >= editor.numrows) filerow = editor.numrows - 1;
+      if (filerow < 0) filerow = 0;
+
+      editor.cy = filerow;
+
+      // translate render col to char col
+      if (filerow < editor.numrows) {
+        editor.cx = editor.rowRxToCx(&editor.row[filerow], filecol);
+      } else {
+        editor.cx = 0;
+      }
+    }
+  }
+}
+
+void Terminal::handleTabClick(int col) {
+  const auto &bufs = buffers.getBuffers();
+  int x = 1;
+  for (int i = 0; i < (int)bufs.size(); i++) {
+    const char *name = bufs[i]->filename
+      ? strrchr(bufs[i]->filename, '/') : NULL;
+    name = (name && *(name + 1)) ? name + 1
+         : (bufs[i]->filename ? bufs[i]->filename : "[No Name]");
+    int tabwidth = strlen(name) + 2 + (bufs[i]->dirty ? 2 : 0);
+    if (col >= x && col < x + tabwidth) {
+      buffers.setActive(i);  // use the setter, after i is defined
+      return;
+    }
+    x += tabwidth + 1;
+  }
+}
+
+
+
 void Terminal::processKeypress() {
   Editor &editor = buffers.current();
-  int c = readKey();
+  InputEvent event = readInput();
+
+  if (event.type == InputEvent::MOUSE) {
+    handleMouse(event.mouse);
+    return;
+  }
+
+  int c = event.key;
   switch (c) {
     case '\r':
       editor.applyCommand(

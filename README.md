@@ -44,8 +44,9 @@ This separation means a GUI renderer can be added later without touching the edi
 
 ## Roadmap
 - [x] Undo/redo
-- [ ] Multiple buffers
-- [ ] Config file (`~/.kutrc`)
+- [x] Multiple buffers
+- [x] Config file (`~/.kutrc`)
+- [x] Mouse support (click, scroll, tab switching)
 - [ ] GUI mode via Dear ImGui
 - [ ] ncurses backend for broader terminal support
 
