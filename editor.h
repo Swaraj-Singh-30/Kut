@@ -73,6 +73,7 @@ public:
   char statusmsg[80];
   time_t statusmsg_time;
   struct editorSyntax *syntax;
+  bool line_numbers;
 
   int tab_stop;
   int quit_times;

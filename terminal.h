@@ -28,6 +28,7 @@ public:
   BufferManager &buffers;
   struct termios orig_termios;
   int screenrows, screencols;
+  int lineNumWidth;
   Config config;
 
   Terminal(BufferManager &bm);
@@ -63,11 +64,10 @@ public:
   void find();
 
 private:
+  bool mouseScrolled;
   InputEvent lastEvent;
   int  getCursorPosition(int *rows, int *cols);
   int  readKey();
   void handleTabClick(int col);
   static void findCallback(Editor &e, char *query, int key);
-
-  bool mouseScrolled;
 };

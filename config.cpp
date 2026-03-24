@@ -37,6 +37,8 @@ void Config::load() {
       if (v >= 1 && v <= 10) quit_times = v;
     } else if (strcmp(key, "theme") == 0) {
       theme = value;
+    } else if (strcmp(key, "line_numbers") == 0) {
+      line_numbers = (strcmp(value, "true") == 0);
     }
     // unknown keys are silently ignored; forward compatible
   }

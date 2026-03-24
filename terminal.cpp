@@ -27,8 +27,15 @@ static void abAppend(struct abuf *ab, const char *s, int len) {
 }
 static void abFree(struct abuf *ab) { free(ab->b); }
 
+static int countDigits(int n) {
+  if (n == 0) return 1;
+  int d = 0;
+  while (n > 0) { n /= 10; d++; }
+  return d;
+}
+
 /*** lifecycle ***/
-Terminal::Terminal(BufferManager &bm) : buffers(bm), screenrows(0), screencols(0), mouseScrolled(false) {}
+Terminal::Terminal(BufferManager &bm) : buffers(bm), screenrows(0), screencols(0), lineNumWidth(0), config(), mouseScrolled(false) {}
 
 Terminal::~Terminal() {
   disableMouse();
@@ -200,6 +207,8 @@ char *Terminal::prompt(const char *promptStr,
 /*** output ***/
 void Terminal::scroll() {
   Editor &editor = buffers.current();
+  int availcols = screencols - lineNumWidth;  // text area width
+
   editor.rx = 0;
   if (editor.cy < editor.numrows)
     editor.rx = editor.rowCxToRx(&editor.row[editor.cy], editor.cx);
@@ -208,8 +217,8 @@ void Terminal::scroll() {
   if (editor.cy >= editor.rowoff + screenrows)
     editor.rowoff = editor.cy - screenrows + 1;
   if (editor.rx < editor.coloff) editor.coloff = editor.rx;
-  if (editor.rx >= editor.coloff + screencols)
-    editor.coloff = editor.rx - screencols + 1;
+  if (editor.rx >= editor.coloff + availcols) 
+    editor.coloff = editor.rx - availcols + 1;
 }
 
 void Terminal::drawTabBar(struct abuf *ab) {
@@ -263,25 +272,50 @@ void Terminal::drawTabBar(struct abuf *ab) {
 
 void Terminal::drawRows(struct abuf *ab) {
   Editor &editor = buffers.current();
+
   for (int y = 0; y < screenrows; y++) {
     int filerow = y + editor.rowoff;
+
     if (filerow >= editor.numrows) {
+      if (editor.line_numbers) {
+        char gutter[16];
+        snprintf(gutter, sizeof(gutter), "%*s | ", lineNumWidth - 3, "~");
+        abAppend(ab, "\x1b[90m", 5);
+        abAppend(ab, gutter, strlen(gutter));
+        abAppend(ab, "\x1b[m", 3);
+      } else {
+        abAppend(ab, "~", 1);
+      }
+
       if (editor.numrows == 0 && y == screenrows / 3) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome),
           "Kut editor -- version %s", KUT_VERSION);
-        if (welcomelen > screencols) welcomelen = screencols;
-        int padding = (screencols - welcomelen) / 2;
-        if (padding) { abAppend(ab, "~", 1); padding--; }
+        int availcols = screencols - lineNumWidth;
+        if (welcomelen > availcols) welcomelen = availcols;
+        int padding = (availcols - welcomelen) / 2;
         while (padding--) abAppend(ab, " ", 1);
         abAppend(ab, welcome, welcomelen);
-      } else {
-        abAppend(ab, "~", 1);
       }
     } else {
+      // draw line number
+      if (editor.line_numbers) {
+        char num[64];
+        if (filerow == editor.cy) {
+          snprintf(num, sizeof(num), "\x1b[97m%*d\x1b[90m | \x1b[m",
+            lineNumWidth - 3, filerow + 1);
+        } else {
+          snprintf(num, sizeof(num), "\x1b[90m%*d | \x1b[m",
+            lineNumWidth - 3, filerow + 1);
+        }
+        abAppend(ab, num, strlen(num));
+      }
+
+      // draw file content
+      int availcols = screencols - lineNumWidth;
       int len = editor.row[filerow].rsize - editor.coloff;
       if (len < 0) len = 0;
-      if (len > screencols) len = screencols;
+      if (len > availcols) len = availcols;
       char *c = &editor.row[filerow].render[editor.coloff];
       unsigned char *hl = &editor.row[filerow].hl[editor.coloff];
       int current_color = -1;
@@ -362,6 +396,8 @@ void Terminal::drawMessageBar(struct abuf *ab) {
 
 void Terminal::refreshScreen() {
   Editor &editor = buffers.current();
+  // compute gutter width for the frame
+  lineNumWidth = editor.line_numbers ? countDigits(editor.numrows) + 3 : 0;
 
   if (!mouseScrolled)
     scroll();
@@ -380,9 +416,10 @@ void Terminal::refreshScreen() {
                         editor.cy < editor.rowoff + screenrows);
   if (cursorVisible) {
     char buf[32];
+    // account for the gutter width so the cursor lines up with rendered text
     snprintf(buf, sizeof(buf), "\x1b[%d;%dH",
       (editor.cy - editor.rowoff) + 1,
-      (editor.rx - editor.coloff) + 1);
+      lineNumWidth + (editor.rx - editor.coloff) + 1);
     abAppend(&ab, buf, strlen(buf));
     abAppend(&ab, "\x1b[?25h", 6); // show cursor
   }
@@ -517,57 +554,48 @@ void Terminal::disableMouse() {
 
 void Terminal::handleMouse(const MouseEvent &mouse) {
   Editor &editor = buffers.current();
-  // editor.setStatusMessage("mouse: btn=%d col=%d row=%d", 
-  //   mouse.button, mouse.col, mouse.row);
-  // tab bar is row 1, status bar is screenrows+2, message is screenrows+3
-  int tabBarRow   = screenrows + 1;  // tab bar is BELOW text area
-  int textAreaTop = 1;               // text starts at row 1
-  int textAreaBot = screenrows;      // text ends at screenrows
 
-if (mouse.button == 64) {
-  int delta = 3;
-  if (editor.rowoff - delta < 0) delta = editor.rowoff;
-  editor.rowoff -= delta;
-  editor.cy -= delta;
-  if (editor.cy < 0) editor.cy = 0;
-  mouseScrolled = true;
-  return;
-}
-if (mouse.button == 65) {
-  int maxRowoff = editor.numrows - screenrows;
-  if (maxRowoff < 0) maxRowoff = 0;
-  int delta = 3;
-  if (editor.rowoff + delta > maxRowoff) delta = maxRowoff - editor.rowoff;
-  editor.rowoff += delta;
-  editor.cy += delta;
-  if (editor.cy >= editor.numrows) editor.cy = editor.numrows - 1;
-  mouseScrolled = true;
-  return;
-}
-  if (mouse.button == 0) { // left click
+  int tabBarRow   = screenrows + 1;
+  int textAreaTop = 1;
+  int textAreaBot = screenrows;
+
+  if (mouse.button == 64) {
+    editor.rowoff -= 3;
+    if (editor.rowoff < 0) editor.rowoff = 0;
+    if (editor.cy < editor.rowoff)
+      editor.cy = editor.rowoff;
+    return;
+  }
+  if (mouse.button == 65) {
+    int maxRowoff = editor.numrows - screenrows;
+    if (maxRowoff < 0) maxRowoff = 0;
+    editor.rowoff += 3;
+    if (editor.rowoff > maxRowoff) editor.rowoff = maxRowoff;
+    if (editor.cy < editor.rowoff)
+      editor.cy = editor.rowoff;
+    if (editor.cy >= editor.rowoff + screenrows)
+      editor.cy = editor.rowoff + screenrows - 1;
+    if (editor.cy >= editor.numrows)
+      editor.cy = editor.numrows - 1;
+    return;
+  }
+
+  if (mouse.button == 0) {
     if (mouse.row == tabBarRow) {
-      // click on tab bar, figure out which tab was clicked
       handleTabClick(mouse.col);
       return;
     }
-
     if (mouse.row >= textAreaTop && mouse.row <= textAreaBot) {
-      // click in text area, move cursor
       int filerow = (mouse.row - textAreaTop) + editor.rowoff;
-      int filecol = (mouse.col - 1) + editor.coloff;
-
-      // clamp to valid range
+      int filecol = (mouse.col - 1 - lineNumWidth) + editor.coloff;
+      if (filecol < 0) filecol = 0;
       if (filerow >= editor.numrows) filerow = editor.numrows - 1;
       if (filerow < 0) filerow = 0;
-
       editor.cy = filerow;
-
-      // translate render col to char col
-      if (filerow < editor.numrows) {
+      if (filerow < editor.numrows)
         editor.cx = editor.rowRxToCx(&editor.row[filerow], filecol);
-      } else {
+      else
         editor.cx = 0;
-      }
     }
   }
 }
@@ -588,7 +616,6 @@ void Terminal::handleTabClick(int col) {
     x += tabwidth + 1;
   }
 }
-
 
 
 void Terminal::processKeypress() {

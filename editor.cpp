@@ -49,6 +49,7 @@ Editor::Editor() {
   tab_stop = 4;        
   quit_times = 3;     
   quit_times_cfg = 3; 
+  line_numbers = true;
 }
 
 Editor::~Editor() {

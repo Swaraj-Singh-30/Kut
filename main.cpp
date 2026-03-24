@@ -23,6 +23,7 @@ int main(int argc, char *argv[]) {
 
   // apply config to the initial buffer
   buffers.current().tab_stop    = config.tab_stop;
+  buffers.current().line_numbers = config.line_numbers;
   buffers.current().quit_times  = config.quit_times;
   buffers.current().quit_times_cfg = config.quit_times;
 
