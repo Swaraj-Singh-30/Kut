@@ -20,7 +20,7 @@ struct InputEvent {
 #define MOUSE_PRESS  2000
 #define MOUSE_SCROLL 2001
 
-// forward declare abuf so we don't need to define it in the header
+// forward declare abuf so, don't need to define it in the header
 struct abuf;
 
 class Terminal {

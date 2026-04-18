@@ -3,7 +3,7 @@
 #include <stack>
 #include <memory>
 
-class Editor; // forward declaration — breaks circular include
+class Editor; // forward declaration, breaks circular include
 
 /*** Abstract base ***/
 class Command {

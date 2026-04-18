@@ -113,7 +113,7 @@ public:
   void  save();
 
   // find
-  void find(char *query, int key);  // callback
+  void find(char *query, int key);
   void startFind();
 
   // status
@@ -125,5 +125,5 @@ public:
   void selectSyntaxHighlight();
 
 private:
-  // nothing private yet — we'll move things here in the C++ification phase
+  // nothing private yet
 };

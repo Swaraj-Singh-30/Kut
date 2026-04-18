@@ -1,5 +1,5 @@
 #include "command.h"
-#include "editor.h"  // full definition needed here to call editor methods
+#include "editor.h"
 
 /*** InsertCharCommand ***/
 void InsertCharCommand::execute(Editor &e) {
