@@ -10,7 +10,7 @@ kut
 *~
 ```
 
-So your repo should look like:
+repo should look like:
 ```
 Kut/
 ├── .gitignore
