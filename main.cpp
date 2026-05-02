@@ -4,7 +4,7 @@
 #include "config.h"
 
 int main(int argc, char *argv[]) {
-  // load config first
+  // load config first  
   Config config;
   config.load();
 

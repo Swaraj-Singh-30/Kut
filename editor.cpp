@@ -388,7 +388,14 @@ void Editor::openFile(const char *fname) {
   filename = strdup(fname);
   selectSyntaxHighlight();
   FILE *fp = fopen(fname, "r");
-  if (!fp) { perror("fopen"); exit(1); }
+  if (!fp) {
+    if (errno == ENOENT) {
+      setStatusMessage("New file: %s", fname);
+      return;
+    }
+    setStatusMessage("Can't open %s: %s", fname, strerror(errno));
+    return;
+  }
   char *line = NULL;
   size_t linecap = 0;
   ssize_t linelen;

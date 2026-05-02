@@ -22,6 +22,15 @@ make
 ./kut filename.cpp
 ```
 
+Open multiple files at launch:
+```bash
+./kut file1.cpp file2.h file3.txt
+```
+
+Switch between open buffers:
+- `Ctrl-N` → next buffer
+- `Ctrl-P` → previous buffer
+
 ## Keybindings
 
 | Key | Action |
