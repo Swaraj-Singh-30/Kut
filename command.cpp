@@ -25,7 +25,7 @@ void DeleteCharCommand::execute(Editor &e) {
 
 void DeleteCharCommand::undo(Editor &e) {
   if (wasNewline) {
-    // undo a newline merge: re-insert the newline
+    // undo a newline merge
     e.cx = cx;
     e.cy = cy - 1;
     e.insertNewline();

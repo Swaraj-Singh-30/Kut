@@ -7,13 +7,12 @@
 #include "command.h"
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
+#include <fstream>
 
 /*** filetypes ***/
 const char *C_HL_extensions[] = { ".c", ".h", ".cpp", NULL };
@@ -387,8 +386,8 @@ void Editor::openFile(const char *fname) {
   free(filename);
   filename = strdup(fname);
   selectSyntaxHighlight();
-  FILE *fp = fopen(fname, "r");
-  if (!fp) {
+  std::ifstream file(fname, std::ios::binary);
+  if (!file.is_open()) {
     if (errno == ENOENT) {
       setStatusMessage("New file: %s", fname);
       return;
@@ -396,16 +395,12 @@ void Editor::openFile(const char *fname) {
     setStatusMessage("Can't open %s: %s", fname, strerror(errno));
     return;
   }
-  char *line = NULL;
-  size_t linecap = 0;
-  ssize_t linelen;
-  while ((linelen = getline(&line, &linecap, fp)) != -1) {
-    while (linelen > 0 && (line[linelen-1] == '\n' || line[linelen-1] == '\r'))
-      linelen--;
-    insertRow(numrows, line, linelen);
+  std::string line;
+  while (std::getline(file, line)) {
+    if (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    insertRow(numrows, line.c_str(), line.size());
   }
-  free(line);
-  fclose(fp);
   dirty = 0;
 }
 

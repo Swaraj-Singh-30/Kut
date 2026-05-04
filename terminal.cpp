@@ -2,14 +2,22 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <time.h>
+#include <fstream>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <conio.h>
+#else
+#include <sys/ioctl.h>
 #include <unistd.h>
+#include <termios.h>
+#endif
 
 /*** append buffer ***/
 struct abuf {
@@ -27,6 +35,18 @@ static void abAppend(struct abuf *ab, const char *s, int len) {
 }
 static void abFree(struct abuf *ab) { free(ab->b); }
 
+static int termWrite(const char *s, int len) {
+#ifdef _WIN32
+  DWORD written = 0;
+  HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (hOut == INVALID_HANDLE_VALUE) return -1;
+  if (!WriteFile(hOut, s, (DWORD)len, &written, NULL)) return -1;
+  return (int)written;
+#else
+  return (int)write(STDOUT_FILENO, s, len);
+#endif
+}
+
 static int countDigits(int n) {
   if (n == 0) return 1;
   int d = 0;
@@ -43,10 +63,35 @@ Terminal::~Terminal() {
 }
 
 void Terminal::enableRawMode() {
-  if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+#ifdef _WIN32
+  state.hIn = GetStdHandle(STD_INPUT_HANDLE);
+  state.hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (state.hIn == INVALID_HANDLE_VALUE || state.hOut == INVALID_HANDLE_VALUE) {
+    fprintf(stderr, "GetStdHandle failed\n");
+    exit(1);
+  }
+  if (!GetConsoleMode(state.hIn, &state.inMode)) {
+    fprintf(stderr, "GetConsoleMode failed\n");
+    exit(1);
+  }
+  if (!GetConsoleMode(state.hOut, &state.outMode)) {
+    fprintf(stderr, "GetConsoleMode failed\n");
+    exit(1);
+  }
+  DWORD inMode = state.inMode;
+  inMode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
+  inMode |= ENABLE_EXTENDED_FLAGS;
+  if (!SetConsoleMode(state.hIn, inMode)) {
+    fprintf(stderr, "SetConsoleMode failed\n");
+    exit(1);
+  }
+  DWORD outMode = state.outMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+  SetConsoleMode(state.hOut, outMode);
+#else
+  if (tcgetattr(STDIN_FILENO, &state.orig_termios) == -1) {
     perror("tcgetattr"); exit(1);
   }
-  struct termios raw = orig_termios;
+  struct termios raw = state.orig_termios;
   raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
   raw.c_oflag &= ~(OPOST);
   raw.c_cflag |= (CS8);
@@ -56,17 +101,31 @@ void Terminal::enableRawMode() {
   if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
     perror("tcsetattr"); exit(1);
   }
+#endif
 }
 
 void Terminal::disableRawMode() {
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+#ifdef _WIN32
+  if (state.hIn) SetConsoleMode(state.hIn, state.inMode);
+  if (state.hOut) SetConsoleMode(state.hOut, state.outMode);
+#else
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &state.orig_termios);
+#endif
 }
 
 /*** input ***/
 int Terminal::getCursorPosition(int *rows, int *cols) {
+#ifdef _WIN32
+  CONSOLE_SCREEN_BUFFER_INFO info;
+  if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+    return -1;
+  *rows = info.dwCursorPosition.Y + 1;
+  *cols = info.dwCursorPosition.X + 1;
+  return 0;
+#else
   char buf[32];
   unsigned int i = 0;
-  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+  if (termWrite("\x1b[6n", 4) != 4) return -1;
   while (i < sizeof(buf) - 1) {
     if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
     if (buf[i] == 'R') break;
@@ -76,20 +135,51 @@ int Terminal::getCursorPosition(int *rows, int *cols) {
   if (buf[0] != '\x1b' || buf[1] != '[') return -1;
   if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
   return 0;
+#endif
 }
 
 int Terminal::getWindowSize(int *rows, int *cols) {
+#ifdef _WIN32
+  CONSOLE_SCREEN_BUFFER_INFO info;
+  if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+    return -1;
+  *cols = info.srWindow.Right - info.srWindow.Left + 1;
+  *rows = info.srWindow.Bottom - info.srWindow.Top + 1;
+  return 0;
+#else
   struct winsize ws;
   if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-    if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    if (termWrite("\x1b[999C\x1b[999B", 12) != 12) return -1;
     return getCursorPosition(rows, cols);
   }
   *cols = ws.ws_col;
   *rows = ws.ws_row;
   return 0;
+#endif
 }
 
 int Terminal::readKey() {
+#ifdef _WIN32
+  while (1) {
+    int ch = _getch();
+    if (ch == 0 || ch == 224) {
+      int code = _getch();
+      switch (code) {
+        case 72: return ARROW_UP;
+        case 80: return ARROW_DOWN;
+        case 75: return ARROW_LEFT;
+        case 77: return ARROW_RIGHT;
+        case 71: return HOME_KEY;
+        case 79: return END_KEY;
+        case 73: return PAGE_UP;
+        case 81: return PAGE_DOWN;
+        case 83: return DEL_KEY;
+        default: return '\x1b';
+      }
+    }
+    return ch;
+  }
+#else
   int nread;
   char c;
   while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
@@ -158,6 +248,7 @@ int Terminal::readKey() {
     return '\x1b';
   }
   return c;
+#endif
 }
 
 InputEvent Terminal::readInput() {
@@ -425,7 +516,7 @@ void Terminal::refreshScreen() {
   }
   // if cursor not visible, leave it hidden (\x1b[?25l already sent above)
 
-  write(STDOUT_FILENO, ab.b, ab.len);
+  termWrite(ab.b, ab.len);
   abFree(&ab);
 }
 
@@ -494,20 +585,18 @@ void Terminal::save() {
   }
   int len;
   char *buf = editor.rowsToString(&len);
-  int fd = open(editor.filename, O_RDWR | O_CREAT, 0644);
-  if (fd != -1) {
-    if (ftruncate(fd, len) != -1) {
-      if (write(fd, buf, len) == len) {
-        close(fd); free(buf);
-        editor.dirty = 0;
-        editor.setStatusMessage("%d bytes written to disk", len);
-        return;
-      }
+  std::ofstream out(editor.filename, std::ios::binary | std::ios::trunc);
+  if (out) {
+    out.write(buf, len);
+    if (out.good()) {
+      free(buf);
+      editor.dirty = 0;
+      editor.setStatusMessage("%d bytes written to disk", len);
+      return;
     }
-    close(fd);
   }
   free(buf);
-  editor.setStatusMessage("Can't save! I/O error: %s", strerror(errno));
+  editor.setStatusMessage("Can't save! I/O error");
 }
 
 /*** input ***/
@@ -541,14 +630,23 @@ void Terminal::moveCursor(int key) {
 }
 
 void Terminal::enableMouse() {
+#ifdef _WIN32
+  // mouse input not enabled in the Windows console backend (yet)
+  return;
+#else
   // SGR extended mouse mode, handles terminals wider than 223 cols
-  write(STDOUT_FILENO, "\x1b[?1000h", 8); // enable mouse clicks
-  write(STDOUT_FILENO, "\x1b[?1006h", 8); // enable SGR extended mode
+  termWrite("\x1b[?1000h", 8); // enable mouse clicks
+  termWrite("\x1b[?1006h", 8); // enable SGR extended mode
+#endif
 }
 
 void Terminal::disableMouse() {
-  write(STDOUT_FILENO, "\x1b[?1006l", 8);
-  write(STDOUT_FILENO, "\x1b[?1000l", 8);
+#ifdef _WIN32
+  return;
+#else
+  termWrite("\x1b[?1006l", 8);
+  termWrite("\x1b[?1000l", 8);
+#endif
 }
 
 
@@ -643,8 +741,8 @@ void Terminal::processKeypress() {
       }
       disableMouse(); 
       disableRawMode();
-      write(STDOUT_FILENO, "\x1b[2J", 4);
-      write(STDOUT_FILENO, "\x1b[H", 3);
+  termWrite("\x1b[2J", 4);
+  termWrite("\x1b[H", 3);
       exit(0);
 
     case CTRL_KEY('s'):

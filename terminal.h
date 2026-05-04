@@ -2,7 +2,21 @@
 
 #include "buffermanager.h"
 #include "config.h"
+
+#ifdef _WIN32
+#include <windows.h>
+struct TerminalState {
+  HANDLE hIn  = NULL;
+  HANDLE hOut = NULL;
+  DWORD inMode = 0;
+  DWORD outMode = 0;
+};
+#else
 #include <termios.h>
+struct TerminalState {
+  struct termios orig_termios;
+};
+#endif
 
 /*** input event ***/
 struct MouseEvent {
@@ -26,7 +40,7 @@ struct abuf;
 class Terminal {
 public:
   BufferManager &buffers;
-  struct termios orig_termios;
+  TerminalState state;
   int screenrows, screencols;
   int lineNumWidth;
   Config config;

@@ -3,7 +3,6 @@
 #include "command.h"
 #include <string>
 #include <vector>
-#include <termios.h>
 #include <time.h>
 
 /*** defines ***/
