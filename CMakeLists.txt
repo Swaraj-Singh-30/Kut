@@ -11,13 +11,12 @@ add_executable(kut
   command.cpp
   buffermanager.cpp
   config.cpp
-  #gui_renderer.cpp
+  terminal.cpp
+  gui_renderer.cpp
 )
 
-# terminal layer -- Unix only
-if(NOT WIN32)
-  target_sources(kut PRIVATE terminal.cpp)
-endif()
+find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
+target_link_libraries(kut sfml-graphics sfml-window sfml-system)
 
 # warnings
 target_compile_options(kut PRIVATE -Wall -Wextra -pedantic)
@@ -26,8 +25,3 @@ target_compile_options(kut PRIVATE -Wall -Wextra -pedantic)
 if(UNIX AND NOT APPLE)
   target_compile_definitions(kut PRIVATE _DEFAULT_SOURCE _BSD_SOURCE _GNU_SOURCE)
 endif()
-
-# SDL2 + SDL_ttf
-# find_package(SDL2 REQUIRED)
-# find_package(SDL2_ttf REQUIRED)
-# target_link_libraries(kut SDL2::SDL2 SDL2_ttf::SDL2_ttf)
