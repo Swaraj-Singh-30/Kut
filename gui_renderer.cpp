@@ -5,6 +5,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -24,25 +25,26 @@ struct GlyphInfo {
 };
 
 struct Theme {
-  sf::Color background = sf::Color(0x28, 0x2C, 0x34);
-  sf::Color text = sf::Color(0xAB, 0xB2, 0xBF);
-  sf::Color keyword1 = sf::Color(0xE0, 0x6C, 0x75);
-  sf::Color keyword2 = sf::Color(0x61, 0xAF, 0xEF);
-  sf::Color string = sf::Color(0x98, 0xC3, 0x79);
-  sf::Color number = sf::Color(0xD1, 0x9A, 0x66);
-  sf::Color comment = sf::Color(0x5C, 0x63, 0x70);
-  sf::Color match = sf::Color(0xE5, 0xC0, 0x7B);
-  sf::Color lineNumber = sf::Color(0x4B, 0x52, 0x63);
-  sf::Color lineNumberActive = sf::Color(0xAB, 0xB2, 0xBF);
-  sf::Color tabBar = sf::Color(0x21, 0x25, 0x2B);
-  sf::Color tabActive = sf::Color(0x28, 0x2C, 0x34);
-  sf::Color tabInactiveText = sf::Color(0x5C, 0x63, 0x70);
-  sf::Color tabAccent = sf::Color(0x61, 0xAF, 0xEF);
-  sf::Color statusBar = sf::Color(0x21, 0x25, 0x2B);
-  sf::Color statusText = sf::Color(0x9D, 0xA5, 0xB4);
-  sf::Color cursor = sf::Color(0x52, 0x8B, 0xFF);
-  sf::Color separator = sf::Color(0x3E, 0x44, 0x51);
-  sf::Color currentLine = sf::Color(0x2C, 0x31, 0x3A);
+  // Tokyo Night palette
+  sf::Color background = sf::Color(0x1A, 0x1B, 0x26);
+  sf::Color text = sf::Color(0xC0, 0xCA, 0xF5);
+  sf::Color keyword1 = sf::Color(0xF7, 0x76, 0x8E);
+  sf::Color keyword2 = sf::Color(0x7A, 0xA2, 0xF7);
+  sf::Color string = sf::Color(0x9E, 0xCE, 0x6A);
+  sf::Color number = sf::Color(0xFF, 0x9E, 0x64);
+  sf::Color comment = sf::Color(0x56, 0x5F, 0x89);
+  sf::Color match = sf::Color(0xE0, 0xAF, 0x68);
+  sf::Color lineNumber = sf::Color(0x41, 0x44, 0x68);
+  sf::Color lineNumberActive = sf::Color(0xC0, 0xCA, 0xF5);
+  sf::Color tabBar = sf::Color(0x16, 0x18, 0x1E);
+  sf::Color tabActive = sf::Color(0x1A, 0x1B, 0x26);
+  sf::Color tabInactiveText = sf::Color(0x56, 0x5F, 0x89);
+  sf::Color tabAccent = sf::Color(0x7A, 0xA2, 0xF7);
+  sf::Color statusBar = sf::Color(0x16, 0x18, 0x1E);
+  sf::Color statusText = sf::Color(0xA9, 0xB1, 0xD6);
+  sf::Color cursor = sf::Color(0x7A, 0xA2, 0xF7);
+  sf::Color separator = sf::Color(0x2A, 0x2E, 0x3F);
+  sf::Color currentLine = sf::Color(0x1F, 0x23, 0x30);
 };
 
 int countDigits(int n) {
@@ -88,11 +90,21 @@ bool loadFont(sf::Font &font) {
   candidates.push_back("JetBrainsMono-Regular.ttf");
   candidates.push_back((std::filesystem::current_path() / "JetBrainsMono-Regular.ttf").string());
 #ifdef _WIN32
+  candidates.push_back("C:\\Windows\\Fonts\\JetBrainsMono-Regular.ttf");
+  candidates.push_back("C:\\Windows\\Fonts\\CascadiaCode.ttf");
+  candidates.push_back("C:\\Windows\\Fonts\\CascadiaMono.ttf");
   candidates.push_back("C:\\Windows\\Fonts\\consola.ttf");
 #elif __APPLE__
+  candidates.push_back("/Library/Fonts/JetBrainsMono-Regular.ttf");
+  candidates.push_back("/Library/Fonts/CascadiaCode.ttf");
+  candidates.push_back("/Library/Fonts/CascadiaMono.ttf");
   candidates.push_back("/Library/Fonts/Menlo.ttc");
   candidates.push_back("/System/Library/Fonts/Menlo.ttc");
 #else
+  candidates.push_back("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Regular.ttf");
+  candidates.push_back("/usr/share/fonts/truetype/JetBrainsMono-Regular.ttf");
+  candidates.push_back("/usr/share/fonts/truetype/cascadia/CascadiaCode.ttf");
+  candidates.push_back("/usr/share/fonts/truetype/cascadia/CascadiaMono.ttf");
   candidates.push_back("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
   candidates.push_back("/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf");
 #endif
@@ -112,8 +124,7 @@ GUIRenderer::GUIRenderer(BufferManager &buffersRef, Config &configRef)
 
 void GUIRenderer::run() {
   Theme theme;
-  const unsigned int fontSize = 14;
-  const float lineHeight = 20.0f;
+  const unsigned int fontSize = 18;
   const float tabBarHeight = 32.0f;
   const float statusBarHeight = 24.0f;
   const float searchBarHeight = 24.0f;
@@ -141,8 +152,14 @@ void GUIRenderer::run() {
   }
   float charWidth = glyphs['M'].advance > 0 ? glyphs['M'].advance : glyphs[' '].advance;
   float lineSpacing = font.getLineSpacing(fontSize);
-  float ascent = -font.getGlyph('A', fontSize, false).bounds.top;
-  float baselineOffset = (lineHeight - lineSpacing) / 2.0f + ascent;
+  sf::FloatRect capBounds = font.getGlyph('H', fontSize, false).bounds;
+  sf::FloatRect lowBounds = font.getGlyph('g', fontSize, false).bounds;
+  float ascent = std::max(-capBounds.top, -lowBounds.top);
+  float descent = std::max(capBounds.height - (-capBounds.top),
+                           lowBounds.height - (-lowBounds.top));
+  float glyphHeight = ascent + descent;
+  float lineHeight = std::ceil(std::max(lineSpacing, glyphHeight) + 4.0f);
+  float baselineOffset = (lineHeight - glyphHeight) / 2.0f + ascent;
 
   sf::Clock blinkClock;
   bool cursorVisible = true;
@@ -453,7 +470,7 @@ void GUIRenderer::run() {
 
       sf::Text tabText(name, font, fontSize);
       tabText.setFillColor(i == buffers.activeIndex() ? theme.text : theme.tabInactiveText);
-      tabText.setPosition(tabX + 8.0f, 6.0f);
+  tabText.setPosition(std::round(tabX + 8.0f), std::round(6.0f));
       window.draw(tabText);
 
   float closeSize = 12.0f;
@@ -477,7 +494,7 @@ void GUIRenderer::run() {
     if (editor.cy >= editor.rowoff && editor.cy < editor.rowoff + visibleRows) {
       int screenRow = editor.cy - editor.rowoff;
       sf::RectangleShape highlight(sf::Vector2f(windowWidth, lineHeight));
-      highlight.setPosition(0.0f, textStartY + screenRow * lineHeight);
+  highlight.setPosition(0.0f, std::round(textStartY + screenRow * lineHeight));
       highlight.setFillColor(theme.currentLine);
       window.draw(highlight);
     }
@@ -497,8 +514,8 @@ void GUIRenderer::run() {
       if (ch < 32 || ch > 126) return;
       const GlyphInfo &g = glyphs[ch];
       if (g.width == 0.0f || g.height == 0.0f) return;
-      float x0 = x + g.left;
-      float y0 = y + g.top;
+  float x0 = std::round(x + g.left);
+  float y0 = std::round(y + g.top);
       float x1 = x0 + g.width;
       float y1 = y0 + g.height;
 
@@ -514,8 +531,8 @@ void GUIRenderer::run() {
 
     for (int y = 0; y < visibleRows; y++) {
       int filerow = y + editor.rowoff;
-      float lineY = textStartY + y * lineHeight;
-      float baseline = lineY + baselineOffset;
+  float lineY = std::round(textStartY + y * lineHeight);
+  float baseline = std::round(lineY + baselineOffset);
 
       if (filerow >= editor.numrows) {
         if (editor.line_numbers) {
@@ -559,7 +576,7 @@ void GUIRenderer::run() {
             int visibleStart = std::max(start - editor.coloff, 0);
             int visibleEnd = std::min(end - editor.coloff, len);
             sf::RectangleShape matchRect(sf::Vector2f((visibleEnd - visibleStart) * charWidth, lineHeight));
-            matchRect.setPosition(textStartX + visibleStart * charWidth, lineY);
+            matchRect.setPosition(std::round(textStartX + visibleStart * charWidth), std::round(lineY));
             sf::Color matchColor = theme.match;
             matchColor.a = 80;
             matchRect.setFillColor(matchColor);
@@ -592,7 +609,7 @@ void GUIRenderer::run() {
     if (editor.dirty) statusLeft << " (modified)";
     sf::Text statusText(statusLeft.str(), font, fontSize);
     statusText.setFillColor(theme.statusText);
-    statusText.setPosition(8.0f, statusTop + 4.0f);
+  statusText.setPosition(std::round(8.0f), std::round(statusTop + 4.0f));
     window.draw(statusText);
 
     std::ostringstream statusRight;
@@ -601,7 +618,7 @@ void GUIRenderer::run() {
     sf::Text rightText(statusRight.str(), font, fontSize);
     rightText.setFillColor(theme.statusText);
     float rightWidth = rightText.getLocalBounds().width;
-    rightText.setPosition(windowWidth - rightWidth - 8.0f, statusTop + 4.0f);
+  rightText.setPosition(std::round(windowWidth - rightWidth - 8.0f), std::round(statusTop + 4.0f));
     window.draw(rightText);
 
     if (searchMode) {
@@ -614,15 +631,15 @@ void GUIRenderer::run() {
       std::string prompt = "Search: " + searchQuery;
       sf::Text searchText(prompt, font, fontSize);
       searchText.setFillColor(theme.statusText);
-      searchText.setPosition(8.0f, searchTop + 4.0f);
+  searchText.setPosition(std::round(8.0f), std::round(searchTop + 4.0f));
       window.draw(searchText);
     }
 
     // Cursor
     if (windowFocused && cursorVisible && editor.cy >= editor.rowoff && editor.cy < editor.rowoff + visibleRows) {
       int screenRow = editor.cy - editor.rowoff;
-      float cursorY = textStartY + screenRow * lineHeight + 2.0f;
-      float cursorX = textStartX + (editor.rx - editor.coloff) * charWidth;
+  float cursorY = std::round(textStartY + screenRow * lineHeight + 2.0f);
+  float cursorX = std::round(textStartX + (editor.rx - editor.coloff) * charWidth);
       sf::RectangleShape cursor(sf::Vector2f(cursorWidth, lineHeight - 4.0f));
       cursor.setPosition(cursorX, cursorY);
       cursor.setFillColor(theme.cursor);
